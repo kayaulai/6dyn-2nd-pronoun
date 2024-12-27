@@ -17,10 +17,49 @@ library(ggmosaic)
 data = readRDS(here("data", "data_processed.csv"))
 ```
 
+
+# Correspondence analysis (abaandoned)
+
+Import packages:
+```{r}
+library(FactoMineR)
+library(factoextra)
+```
+
+Choosing active variables for qīng:
+```{r}
+data_qing = data %>% filter(PronTypeSimple == "Qing")
+data_qing_active = data_qing %>% select(Power, Intimate, StanceH, StanceS, ImpositionH, BenH, Kin)
+data_all_active = data %>% select(Power, Intimate, StanceH, StanceS, ImpositionH, BenH, Kin)
+```
+
+Run model:
+```{r}
+model_mca_qing = MCA(data_qing_active, ncp = 5, graph = T)
+```
+
+```{r}
+library(factoextra)
+model_mca_qing_eigen = get_eigenvalue(model_mca)
+fviz_screeplot(model_mca, addlabels = TRUE, ylim = c(0, 45))
+```
+
+```{r}
+fviz_mca_var(model_mca_qing, 
+             repel = TRUE, # Avoid text overlapping (slow)
+             ggtheme = theme_minimal())
+
+```
+
+
 # Mosaic charts
 ```{r}
-ggplot(data %>% filter(PronTypeSimple %in% c("Qing", "RuEr"), Power != "/", Intimate != "/") %>% mutate(Intimate = as.character(Intimate) %>% factor(levels = c("N", "Y")), Power = as.character(Power) %>% factor(levels = c("Listener", "Equal", "Speaker")))) +
-  geom_mosaic(aes(x=product(Power, Intimate), fill = Power))  +   
+ggplot(data %>%
+  filter(PronTypeSimple %in% c("Qing", "RuEr"), Power != "/", Intimate != "/") %>%
+  mutate(Intimate = as.character(Intimate) %>%
+  factor(levels = c("N", "Y")), Power = as.character(Power) %>%
+  factor(levels = c("Listener", "Equal", "Speaker")))) +
+  geom_mosaic(aes(x=product(Power, Intimate), fill = Power))  + 
   labs(y="Who has power over the other in the dyad?", x="Is the relationship intimate?", title = "When do people get called 'qing'?") + facet_wrap("PronTypeSimple") + theme(axis.text.y.left = element_blank()) +
   geom_mosaic_text(aes(x = product(Power, Intimate), label = after_stat(.wt)), as.label=TRUE)
 ```

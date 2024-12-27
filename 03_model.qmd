@@ -3,6 +3,7 @@ title: "3. Model"
 format: html
 ---
 
+Import packages:
 ```{r}
 library(here)
 library(tidyr)
@@ -10,29 +11,72 @@ library(dplyr)
 library(rlang)
 library(glue)
 library(brms)
+library(projpred)
+library(purrr)
+library(parallel)
 ```
 
-
+Import data:
 ```{r}
 data = readRDS(here("data", "data_processed.csv"))
+pron_order = c("Jun", "Qing", "Gong", "RuEr")
+data = data %>% mutate(PronTypeSimple = factor(PronTypeSimple, levels = pron_order))
 ```
 
-# Prior predictive checks
-Setting the prior
+# Priors
+
+Setting the priors for coefficients:
 ```{r}
+set_prior_pronpredict = function(response_cats, var){
+    purrr::reduce(
+        lapply(response_cats,
+            function(x){
+                set_prior(glue("normal(0, {var})"),
+                    class = "b",
+                    dpar = glue("mu{x}"))
+            }
+        ),
+        c)
+}
+
+model_brm_priors = set_prior_pronpredict(pron_order[-1], 4)
 
 ```
 
 # Running models
 
+Function to create models:
 ```{r}
-model1 = brm(bf(PronTypeSimple ~ Power), data = data, family = categorical(link = "logit"), chains = 1, prior = set_prior("normal(0, 5)", class = "b", dpar = "muJun"))
-model2 = brm(bf(y | trials(trials) ~ Power * Intimate), data = data, family = multinomial(link = "logit"), chains = 1, prior = set_prior("normal(0,5)"))
-model3 = brm(bf(y | trials(trials) ~ Power * Intimate * StanceH  + Kin), data = data, family = multinomial(link = "logit"), chains = 1, prior = set_prior("normal(0,5)"))
-model4 = brm(bf(y | trials(trials) ~ Power * Intimate * StanceH + StanceS + ImpositionH + BenH + Kin), data = data, family = multinomial(link = "logit"), chains = 1, prior = set_prior("normal(0,5)"))
-model5 = brm(bf(y | trials(trials) ~ Power * Intimate * StanceH * StanceS * ImpositionH * BenH * Kin), data = data, family = multinomial(link = "logit"), chains = 1, prior = set_prior("normal(0,5)"))
-model6_re = brm(bf(y | trials(trials) ~ Power * Intimate + Power * StanceH + Intimate * StanceH + StanceS  + Kin + (1 | Speaker) ), data = data, family = multinomial(link = "logit"), prior = set_prior("normal(0,5)"), cores = getOption("mc.cores", 4L))
-compare_waic = waic(model1, model2, model3, model4, model5, model6)
+num_cores = parallel::detectCores(logical = FALSE) - 2L
+get_model_pronpredict = function(formula, chains = 4L, iter = 2000L, cores = 1L){
+    brm(formula,
+        data = data,
+        family = categorical(link = "logit"),
+        chains = chains,
+        iter = iter,
+        prior = model_brm_priors,
+        cores = getOption("mc.cores", min(cores, chains)))
+}
+```
+
+Simple trial model to ensure everything works correctly:
+```{r}
+model_test = get_model_pronpredict(
+    bf(PronTypeSimple ~ Power),
+    chains = 2L, iter = 1000L,
+    cores = num_cores)
+```
+
+
+Full model
+```{r}
+model_full = get_model_pronpredict(
+    bf(PronTypeSimple ~ Power * Intimate + Power * StanceH + Intimate * StanceH + StanceS + Kin + ImpositionH + (1 | Speaker)),
+    cores = num_cores
+)
+```
+
+```{r}
 ```
 
 ```{r}

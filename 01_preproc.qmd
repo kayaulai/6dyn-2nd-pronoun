@@ -1,0 +1,94 @@
+---
+title: "1. Data preprocessing"
+format: html
+---
+
+```{r}
+library(here)
+library(readr)
+library(tidyr)
+library(dplyr)
+library(rlang)
+library(glue)
+```
+
+# Import
+
+Merge together different forms of the pronouns (mostly morphemes indicating multiple members), merge superior-subordinate relations as well, and turn most things into factors:
+
+```{r}
+data = here::here("data", "20200315-2prononly.csv") %>%
+  read_csv(na = "na")
+
+data = data %>%
+  mutate(Intimate = case_when(Intimate %in% c("/", "?", "Mixed", "U") ~ "/", T ~ Intimate)) %>%
+  mutate(Power = case_when(Power %in% c("/", "?") ~ "/", T ~ Power))  %>% 
+  mutate(Jun = PronType %in% c("Junbei", "Zhujun", "Jun"),
+        Qing = PronType %in% c("Qingbei", "Qingdeng", "Qing") ,
+        Gong = PronType %in% c("Minggong", "Gong"),
+        Ru   = PronType %in% c("Rudeng", "Ru"),
+        Er   = PronType %in% "Er") %>%
+  filter(PronType %in% c("Qing", "Qingdeng", "Zhuqing", "Qingbei",
+    "Ru", "Rudeng", "Rubei",
+    "Er", "Erding", "Erbei",
+    "Gong", "Gongdeng", "Minggong", "Gongbei",
+    "Jun", "Zhujun", "Junbei", "Jundeng")) %>%
+  mutate(SupSub = (Relation %in% c("Superior-subordinate", "Subordinate-superior",
+      "Superior-subordinate (former)", "Subordinate-superior (former)")))%>%
+  mutate(across(all_of(c("Pronoun", "PronType", "Act", "Speaker", "Listener",
+    "Power", "Intimate", "StanceH", "StanceS", "ImpositionH", "BenH", "Kin")), as.factor)) %>%
+  mutate(across(all_of(c("Jun", "Qing", "Ru", "Er", "Gong")), as.integer)) %>%
+  mutate(trials = Jun + Qing + Ru + Er + Gong)
+
+data$y = with(data, cbind(Jun, Qing, Ru, Er, Gong))
+data = data %>% mutate(PronTypeSimple = case_when(
+  PronType %in% c("Junbei", "Zhujun", "Jun") ~ "Jun",
+  PronType %in% c("Qingbei", "Qingdeng", "Qing") ~ "Qing",
+  PronType %in% c("Minggong", "Gong") ~ "Gong",
+   PronType %in% c("Rudeng", "Ru", "Er") ~ "RuEr")
+)
+data = data %>%
+  mutate(PronTypeRuErSep = case_when(
+    PronType %in% c("Junbei", "Zhujun", "Jun") ~ "Jun",
+    PronType %in% c("Qingbei", "Qingdeng", "Qing") ~ "Qing",
+    PronType %in% c("Minggong", "Gong") ~ "Gong",
+    PronType %in% c("Rudeng", "Ru") ~ "Ru",
+    T ~ "Er")) %>%
+  mutate(PronTypeRuErSep = as.factor(PronTypeRuErSep))
+```
+
+
+```{r}
+saveRDS(data, here("data", "data_processed.csv"))
+```
+
+# Tabulations
+
+
+```{r}
+tabulateFactorProntypeRelationship = function(factor){
+  table = data %>%
+    group_by(!!parse_expr(factor), PronTypeSimple) %>%
+    summarise(freq = n()) %>%
+    pivot_wider(id_cols = factor,
+      values_from = "freq",
+      names_from = "PronTypeSimple") %>%
+    mutate(Total = RuEr + Jun + Qing + Gong) %>%
+    mutate(RuEr = (RuEr / Total * 100) %>% round(2),
+            Jun = (Jun / Total * 100) %>% round(2),
+            Qing = (Qing / Total * 100) %>% round(2),
+            Gong = (Gong / Total * 100) %>% round(2)) %>%
+    select(!!parse_expr(factor), RuEr, Jun, Qing, Gong, Total)
+  write_csv(table, glue("output/{factor}_pronType.csv"))
+  table
+}
+
+tabulateFactorProntypeRelationship("Intimate")
+tabulateFactorProntypeRelationship("Power")
+tabulateFactorProntypeRelationship("Kin")
+tabulateFactorProntypeRelationship("SupSub")
+tabulateFactorProntypeRelationship("StanceH")
+tabulateFactorProntypeRelationship("StanceS")
+tabulateFactorProntypeRelationship("ImpositionH")
+tabulateFactorProntypeRelationship("BenH")
+```

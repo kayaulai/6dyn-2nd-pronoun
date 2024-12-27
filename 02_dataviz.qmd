@@ -1,0 +1,26 @@
+---
+title: "1. Data preprocessing"
+format: html
+---
+
+```{r}
+library(here)
+library(tidyr)
+library(dplyr)
+library(rlang)
+library(glue)
+library(ggmosaic)
+```
+
+
+```{r}
+data = readRDS(here("data", "data_processed.csv"))
+```
+
+# Mosaic charts
+```{r}
+ggplot(data %>% filter(PronTypeSimple %in% c("Qing", "RuEr"), Power != "/", Intimate != "/") %>% mutate(Intimate = as.character(Intimate) %>% factor(levels = c("N", "Y")), Power = as.character(Power) %>% factor(levels = c("Listener", "Equal", "Speaker")))) +
+  geom_mosaic(aes(x=product(Power, Intimate), fill = Power))  +   
+  labs(y="Who has power over the other in the dyad?", x="Is the relationship intimate?", title = "When do people get called 'qing'?") + facet_wrap("PronTypeSimple") + theme(axis.text.y.left = element_blank()) +
+  geom_mosaic_text(aes(x = product(Power, Intimate), label = after_stat(.wt)), as.label=TRUE)
+```

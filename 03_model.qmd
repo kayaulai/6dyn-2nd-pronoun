@@ -14,6 +14,7 @@ library(brms)
 library(projpred)
 library(purrr)
 library(parallel)
+library(stringr)
 ```
 
 Import data:
@@ -22,6 +23,20 @@ data = readRDS(here("data", "data_processed.csv"))
 pron_order = c("Jun", "Qing", "Gong", "RuEr")
 data = data %>% mutate(PronTypeSimple = factor(PronTypeSimple, levels = pron_order))
 ```
+
+```{r}
+load_models = function(models, regex = "model_.*\\.rds"){
+    model_files = list.files(here("models"))
+    model_files = model_files[str_detect(model_files, "^model_.*\\.rds")]
+    models = list()
+    for(filename in model_files){
+        model_name = str_replace(filename, "\\.rds", "")
+        env_poke(global_env(), model_name, readRDS(here("models", filename)))
+    }
+}
+load_models()
+```
+
 
 # Priors
 
@@ -55,7 +70,8 @@ get_model_pronpredict = function(formula, chains = 4L, iter = 2000L, cores = 1L)
         chains = chains,
         iter = iter,
         prior = model_brm_priors,
-        cores = getOption("mc.cores", min(cores, chains)))
+        cores = getOption("mc.cores", min(cores, chains)),
+        save_pars = save_pars(all = TRUE))
 }
 ```
 
@@ -67,49 +83,81 @@ model_test = get_model_pronpredict(
     cores = num_cores)
 ```
 
-
-Full model
+Main effects only: 
 ```{r}
-model_full = get_model_pronpredict(
-    bf(PronTypeSimple ~ Power * Intimate + Power * StanceH + Intimate * StanceH + StanceS + Kin + ImpositionH + (1 | Speaker)),
+model_mainonly = get_model_pronpredict(
+    bf(PronTypeSimple ~ Power + Intimate + StanceH + StanceS + Kin + ImpositionH + (1 | Speaker)),
+    cores = num_cores
+)
+saveRDS(model_mainonly, file = "models/model_mainonly.rds")
+```
+
+Power / stance interact:
+```{r}
+model_main_powstanceh = get_model_pronpredict(
+    bf(PronTypeSimple ~ Intimate + Power * StanceH + StanceS + Kin + ImpositionH + (1 | Speaker)),
     cores = num_cores
 )
 ```
 
+Intimacy interacting with power / stance:
 ```{r}
+model_main_powintim = get_model_pronpredict(
+    bf(PronTypeSimple ~ Power * Intimate + StanceH + StanceS + Kin + ImpositionH + (1 | Speaker)),
+    cores = num_cores
+)
+model_main_intimstanceh = get_model_pronpredict(
+    bf(PronTypeSimple ~ Power + Intimate * StanceH + StanceS + Kin + ImpositionH + (1 | Speaker)),
+    cores = num_cores
+)
+model_full_intim = get_model_pronpredict(
+    bf(PronTypeSimple ~ Power * Intimate + Power * StanceH + Intimate * StanceH + StanceS + Kin + ImpositionH + (1 | Speaker)),
+    cores = num_cores
+)
+
+saveRDS(model_main_powintim, file = "models/model_main_powintim.rds")
+saveRDS(model_main_powstanceh, file = "models/model_main_powstanceh.rds")
+saveRDS(model_main_intimstanceh, file = "models/model_main_intimstanceh.rds")
+saveRDS(model_full_intim, file = "models/model_full_intim.rds")
+```
+
+Kin interacting with power / stance:
+```{r}
+model_main_powkin = get_model_pronpredict(
+    bf(PronTypeSimple ~ Power * Intimate + StanceH + StanceS + Kin + ImpositionH + (1 | Speaker)),
+    cores = num_cores
+)
+model_main_kintanceh = get_model_pronpredict(
+    bf(PronTypeSimple ~ Power + Intimate * StanceH + StanceS + Kin + ImpositionH + (1 | Speaker)),
+    cores = num_cores
+)
+model_full_kin = get_model_pronpredict(
+    bf(PronTypeSimple ~ Power * Kin + Power * StanceH + Kin * StanceH + StanceS + Intimate + ImpositionH + (1 | Speaker)),
+    cores = num_cores
+)
+saveRDS(model_main_powkin, file = "models/model_main_powkin.rds")
+saveRDS(model_main_kintanceh, file = "models/model_main_kintanceh.rds")
+saveRDS(model_full_kin, file = "models/model_full_kin.rds")
 ```
 
 ```{r}
-model3_summ = summary(model3)
-model3_fix = fixef(model3, probs = c(0.05, 0.95)) %>% data.frame
-model3_fix = model3_fix %>% mutate(Coef = rownames(model3_fix))
-write_csv(model3_fix, "model3fix.csv")
-
-model4_summ = summary(model4)
-model4_fix = fixef(model4, probs = c(0.05, 0.95)) %>% data.frame
-model4_fix = model4_fix %>% mutate(Coef = rownames(model4_fix))
-write_csv(model4_fix, "model4fix.csv")
-
-model3_re = brm(bf(y | trials(trials) ~ Power * Intimate * StanceH  + Kin + (1 | Speaker) ), data = data, family = multinomial(link = "logit"), chains = 1)
-model3_re = brm(bf(y | trials(trials) ~ Power * Intimate * StanceH  + Kin + (1 | Speaker) ), data = data, family = multinomial(link = "logit"), prior = set_prior("normal(0,5)"), cores = getOption("mc.cores", 4L))
-model3_re_fix = fixef(model3_re, probs = c(0.05, 0.95)) %>% data.frame
-model3_re_fix = model3_re_fix %>% mutate(Coef = rownames(model3_re_fix))
-model3_re_rand = coef(model3_re, probs = c(0.05, 0.95)) %>% data.frame
-model3_re_rand = model3_re_rand %>% mutate(Coef = rownames(model3_re_rand))
-
-model3_re_fix_80 = fixef(model3_re, probs = c(0.1, 0.9)) %>% data.frame
-model3_re_fix_80 = model3_re_fix_80 %>% mutate(Coef = rownames(model3_re_fix_80))
-model3_re_rand_80 = coef(model3_re, probs = c(0.1, 0.90)) %>% data.frame
-model3_re_rand_80 = model3_re_rand %>% mutate(Coef = rownames(model3_re_rand))
-
-cbind(levels(data$Speaker), model3_re_rand_80[,c(1,5,9,13)]) %>% View
-write_csv(model3_re_fix, "model3refix.csv")
-write_csv(model3_re_rand, "model3rerand.csv")
-write_csv(model3_re_fix_80, "model3refix_80.csv")
-write_csv(model3_re_rand_80, "model3rerand_80.csv") 
-
-model6_re_fix_80 = fixef(model6_re, probs = c(0.1, 0.9)) %>% data.frame
-model6_re_fix_80 = model6_re_fix_80 %>% mutate(Coef = rownames(model6_re_fix_80))
+list_files(here("models"))
 ```
 
-# Posterior predictive checks
+
+
+# Model comparison
+```{r}
+#loo_compare = loo(model_mainonly, model_full, model_main_powintim, model_main_powstanceh, model_main_intimstanceh, moment_match = TRUE)
+kfold_compare = kfold(model_mainonly, model_main_powstanceh,
+    model_main_powintim, model_main_intimstanceh,
+    model_main_powkin, model_main_kintanceh,
+    model_full_kin, model_full_intim)
+saveRDS(kfold_compare, file = "models/cv_model_withintim.rds")
+```
+
+
+# Bayesian model weighting
+```{r}
+
+```

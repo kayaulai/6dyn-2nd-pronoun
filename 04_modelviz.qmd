@@ -1,0 +1,43 @@
+---
+title: "3. Model"
+format: html
+---
+
+Import packages:
+```{r}
+library(here)
+library(tidyr)
+library(dplyr)
+library(rlang)
+library(glue)
+library(brms)
+library(projpred)
+library(purrr)
+library(parallel)
+```
+
+Import data:
+```{r}
+data = readRDS(here("data", "data_processed.csv"))
+pron_order = c("Jun", "Qing", "Gong", "RuEr")
+data = data %>% mutate(PronTypeSimple = factor(PronTypeSimple, levels = pron_order))
+```
+
+# Effects
+
+```{r}
+getFixedEffects = function(model){
+    data.frame(fixef(model, probs = c(.1, .9))) %>%
+        rownames_to_column()
+}
+getRandEffects = function(model){
+    data.frame(coef(model, probs = c(.1, .9))) %>%
+        rownames_to_column()
+}
+
+#cbind(levels(data$Speaker), model3_re_rand_80[,c(1,5,9,13)]) %>% View
+write_csv(model3_re_fix, "model3refix.csv")
+write_csv(model3_re_rand, "model3rerand.csv")
+write_csv(model3_re_fix_80, "model3refix_80.csv")
+write_csv(model3_re_rand_80, "model3rerand_80.csv") 
+```

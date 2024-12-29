@@ -15,6 +15,7 @@ library(projpred)
 library(purrr)
 library(parallel)
 library(stringr)
+library(ggplot2)
 ```
 
 Import data:
@@ -25,7 +26,7 @@ data = data %>% mutate(PronTypeSimple = factor(PronTypeSimple, levels = pron_ord
 ```
 
 ```{r}
-load_models = function(models, regex = "model_.*\\.rds"){
+load_models = function(regex = "model_.*\\.rds"){
     model_files = list.files(here("models"))
     model_files = model_files[str_detect(model_files, "^model_.*\\.rds")]
     models = list()
@@ -147,17 +148,71 @@ list_files(here("models"))
 
 
 # Model comparison
+Run cross validation:
 ```{r}
 #loo_compare = loo(model_mainonly, model_full, model_main_powintim, model_main_powstanceh, model_main_intimstanceh, moment_match = TRUE)
 kfold_compare = kfold(model_mainonly, model_main_powstanceh,
     model_main_powintim, model_main_intimstanceh,
     model_main_powkin, model_main_kintanceh,
     model_full_kin, model_full_intim)
-saveRDS(kfold_compare, file = "models/cv_model_withintim.rds")
+saveRDS(kfold_compare, file = "models/cv_model.rds")
+rm(list = ls()[str_detect(ls(), "^model_[a-z_]*$")])
+kfold_compare = readRDS(here("models", "cv_model.rds"))
 ```
 
+Functions to plot the evaluations:
+```{r}
+plot_brmsveval_ic = function(brmseval){
+    brmseval_to_ggplot_df(brmseval) %>%
+        arrange(ic) %>%
+        ggplot(aes(y = ic, x = model)) +
+        geom_point() +
+        geom_errorbar(aes(ymin = ic_lower, ymax = ic_upper))
+}
+
+plot_elpd_diff = function(brmseval, choose_thres = 3){
+    brmseval$diffs %>%
+        data.frame %>%
+        tibble::rownames_to_column("model") %>%
+        mutate(model = factor(model, levels = model)) %>%
+        mutate(model_id = 1:nrow(brmseval$diffs),
+               chosen = model_id <= choose_thres) %>%
+        mutate(elpd_diff_u = elpd_diff + se_diff,
+               elpd_diff_l = elpd_diff - se_diff) %>%
+        ggplot(aes(y = elpd_diff, x = model_id, col = chosen)) +
+        geom_point() +
+        geom_errorbar(aes(ymin = elpd_diff_l,
+                          ymax = elpd_diff_u,
+                          width=.2),) +
+        scale_x_continuous(breaks = 1:nrow(brmseval$diffs)) +
+        xlab("Model ID") +
+        ylab("ELPD difference with optimal model") +
+        theme(legend.position = "none")
+}
+
+brmseval_to_ggplot_df = function(brmseval){
+    best = names(which.min(lapply(brmseval$loos,
+        function(x) x$estimates[3, 1])))
+
+    lapply(names(brmseval$loos),
+        function(model_name){
+            c(model = model_name, brmseval$loos[[model_name]]$estimates[3,])
+        }) %>%
+        bind_rows %>%
+        rename(ic = Estimate,
+               se = SE) %>%
+        mutate(ic = as.numeric(ic),
+               se = as.numeric(se)) %>%
+        mutate(ic_upper = ic + se,
+               ic_lower = ic - se)
+}
+
+plot_brmsveval_ic(kfold_compare)
+plot_elpd_diff(kfold_compare)
+```
 
 # Bayesian model weighting
 ```{r}
-
+load_models(regex = "model_main_(?:full_intim|main_kintanceh|main_powkin)")
+model_best_averaged = brms::pp_average(model_full_intim, model_main_kintanceh, model_main_powkin, weights = "kfold")
 ```

@@ -11,9 +11,13 @@ library(dplyr)
 library(rlang)
 library(glue)
 library(brms)
-library(projpred)
 library(purrr)
-library(parallel)
+library(stringr)
+library(marginaleffects)
+library(ggplot2)
+library(readr)
+library(tibble)
+source("utilities.R")
 ```
 
 Import data:
@@ -23,21 +27,172 @@ pron_order = c("Jun", "Qing", "Gong", "RuEr")
 data = data %>% mutate(PronTypeSimple = factor(PronTypeSimple, levels = pron_order))
 ```
 
+```{r}
+#model_pseudobma_weights = readRDS(here("models", "model_best3_pseudobma_weights.rds"))
+load_models(regex = "^model_main_powkin\\.rds$")
+```
+
 # Effects
 
 ```{r}
 getFixedEffects = function(model){
     data.frame(fixef(model, probs = c(.1, .9))) %>%
-        rownames_to_column()
+        tibble::rownames_to_column()
 }
 getRandEffects = function(model){
     data.frame(coef(model, probs = c(.1, .9))) %>%
-        rownames_to_column()
+        tibble::rownames_to_column()
 }
 
-#cbind(levels(data$Speaker), model3_re_rand_80[,c(1,5,9,13)]) %>% View
-write_csv(model3_re_fix, "model3refix.csv")
-write_csv(model3_re_rand, "model3rerand.csv")
-write_csv(model3_re_fix_80, "model3refix_80.csv")
-write_csv(model3_re_rand_80, "model3rerand_80.csv") 
+write_csv(getFixedEffects(model_main_powkin), here("models", "model_powkin_fe.csv"))
+write_csv(getRandEffects(model_main_powkin), here("models", "model_powkin_re.csv"))
+```
+
+# Compute predictions and comparisons
+
+```{r}
+data_x = data %>% select(Speaker, Power, Intimate, StanceH, StanceS, BenH, Kin)
+```
+
+```{r}
+predictor_combos = tidyr::expand_grid(Power = c("Speaker", "Equal", "Listener"), Intimate = c("/", "Y", "N"), Kin = c("Yes", ""),
+    StanceH = c("Pos", "Neg", "Q", ""), StanceS = c("Pos", "Q", "")) %>%
+        filter(!(Kin ==  "" & Intimate == "Y"))
+datagrid_allcombosexceptimpose_speakerunk = datagrid(Power = predictor_combos$Power, Intimate = predictor_combos$Intimate, Kin = predictor_combos$Kin,
+    StanceH = predictor_combos$StanceH, StanceS = predictor_combos$StanceS, Speaker = "?", model = model_main_powkin)
+write_csv(datagrid_allcombosexceptimpose_speakerunk, here("output", "datagrid_allcombosexceptimpose_speakerunk.csv"))
+```
+
+```{r}
+predicts_allcombosexceptimpose_speakerunk = predictions(model_main_powkin, datagrid_allcombosexceptimpose_speakerunk,
+        conf.level = .8)
+write_csv(predicts_allcombosexceptimpose_speakerunk, here("output", "predicts_allcombosexceptimpose_speakerunk.csv"))
+```
+
+```{r}
+predicts_allcombosexceptimpose_speakerunk_50 = predictions(model_main_powkin, datagrid_allcombosexceptimpose_speakerunk,
+        conf.level = .5)
+write_csv(predicts_allcombosexceptimpose_speakerunk_50, here("output", "predicts_allcombosexceptimpose_speakerunk_50.csv"))
+```
+
+```{r}
+predicts_orig = predictions(model_main_powkin, conf.level = .8)
+write_csv(predicts_orig, here("output", "predicts_orig.csv"))
+```
+
+```{r}
+comparisons_all = comparisons(model_main_powkin,
+                                newdata = datagrid_allcombosexceptimpose_speakerunk,
+                                variables = list(Power = "all", Intimate = "all",
+                                                 StanceS= "all", StanceH = "all"),
+                                                 conf_level = 0.8)
+write_csv(comparisons_all, here("output", "model_powkin_comparisons_all.csv"))
+```
+
+
+```{r}
+comparisons_all_50 = comparisons(model_main_powkin,
+                                newdata = datagrid_allcombosexceptimpose_speakerunk,
+                                variables = list(Power = "all", Intimate = "all",
+                                                 StanceS= "all", StanceH = "all"),
+                                                 conf_level = 0.5)
+write_csv(comparisons_all_50, here("output", "model_powkin_comparisons_all_50.csv"))
+```
+
+# Visualisation
+
+```{r}
+comparisons_all = read_csv(here("output", "model_powkin_comparisons_all.csv"))
+predicts = read_csv(here("output", "predicts_allcombosexceptimpose_speakerunk.csv"))
+predicts_orig = read_csv(here("output", "predicts_orig.csv"))
+```
+
+```{r}
+prep_me_df_for_viz = function(df){
+    df %>%
+        mutate(Kin = replace_na(Kin, "No")) %>%
+        mutate(RelDist = case_when(Kin == "Yes" ~ "Kin",
+                               Intimate == "Y" & Kin == "No" ~ "IntimateNonKin",
+                               Intimate == "N" & Kin == "No" ~ "NonIntimate")) %>%
+        mutate(group = factor(group, levels = c("Qing", "RuEr", "Jun", "Gong"))) %>%
+        mutate(RelDist = factor(RelDist, levels = c("Kin", "IntimateNonKin", "NonIntimate")),
+               Power = factor(Power, levels = c("Listener", "Equal", "Speaker"))) %>%
+        filter(!is.na(RelDist), is.na(ImpositionH)) %>%
+        filter((!(Kin == "Yes" & Intimate == "N") & !(Kin == "Yes" & Intimate == "/")) | is.na(Kin))
+}
+comparisons_viz = prep_me_df_for_viz(comparisons_all)
+predicts_viz = prep_me_df_for_viz(predicts)
+```
+
+```{r}
+levels2text_RelDist = c(Kin = "Kin", IntimateNonKin = "Intimate Non-Kin", NonIntimate = "Non-Intimate")
+levels2text_pow = c(Listener = "Listener", Speaker = "Speaker", Equal = "Equal")
+levels2text_pron = c(Qing = "qīng", RuEr = "rǔ/\něr", Jun = "jūn", Gong = "gōng")
+```
+
+Predictions for each dyad type with neutral stance:
+
+```{r}
+predicts_viz %>%
+    filter(is.na(StanceH), is.na(StanceS)) %>%
+    ggplot(aes(x = group, y = estimate)) +
+    facet_grid(Power ~ RelDist,
+               labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
+    geom_point() +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2) +
+    theme_bw() + 
+    geom_line(aes(group = Power)) +
+    ylab("Probability") +
+    theme(text = element_text(size = 26)) +
+    scale_x_discrete(labels = levels2text_pron)
+```
+
+I want to compare StanceS values in different dyads:
+```{r}
+predicts_viz %>%
+    filter(StanceH %in% c("Pos", "Neg"), is.na(StanceS)) %>%
+    ggplot(aes(x = group, y = estimate, group = StanceH, col = StanceH)) +
+    facet_grid(Power ~ RelDist,
+               labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
+    geom_point() +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2) +
+    theme_bw() + 
+    geom_line() +
+    ylab("Probability") +
+    theme(text = element_text(size = 26)) +
+    scale_x_discrete(labels = levels2text_pron)
+```
+
+```{r}
+comparisons_viz %>%
+    filter(term == "StanceH", contrast %in% c("Neg -", "Pos -"), is.na(StanceS)) %>%
+    ggplot(aes(x = group, y = estimate, group = contrast, col = contrast)) +
+    geom_hline(yintercept = 0) +
+    facet_grid(Power ~ RelDist,
+               labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
+    geom_point() +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2) +
+    theme_bw() + 
+    geom_line() +
+    ylab("Probability difference\n(compared to neutral stance)") +
+    theme(text = element_text(size = 26)) +
+    scale_x_discrete(labels = levels2text_pron) +
+    theme()
+```
+
+```{r}
+comparisons_viz %>%
+    filter(term == "StanceS", contrast %in% c("Pos -"), is.na(StanceH)) %>%
+    ggplot(aes(x = group, y = estimate, col = contrast)) +
+    geom_hline(yintercept = 0) +
+    facet_grid(Power ~ RelDist,
+               labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
+    geom_point() +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2) +
+    theme_bw() + 
+    geom_line() +
+    ylab("Probability difference\n(compared to neutral stance)") +
+    theme(text = element_text(size = 26)) +
+    scale_x_discrete(labels = levels2text_pron) +
+    theme()
 ```

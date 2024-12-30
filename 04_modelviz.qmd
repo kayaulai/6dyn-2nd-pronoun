@@ -4,6 +4,7 @@ format: html
 ---
 
 Import packages:
+
 ```{r}
 library(here)
 library(tidyr)
@@ -21,6 +22,7 @@ source("utilities.R")
 ```
 
 Import data:
+
 ```{r}
 data = readRDS(here("data", "data_processed.csv"))
 pron_order = c("Jun", "Qing", "Gong", "RuEr")
@@ -89,7 +91,6 @@ comparisons_all = comparisons(model_main_powkin,
 write_csv(comparisons_all, here("output", "model_powkin_comparisons_all.csv"))
 ```
 
-
 ```{r}
 comparisons_all_50 = comparisons(model_main_powkin,
                                 newdata = datagrid_allcombosexceptimpose_speakerunk,
@@ -104,7 +105,20 @@ write_csv(comparisons_all_50, here("output", "model_powkin_comparisons_all_50.cs
 ```{r}
 comparisons_all = read_csv(here("output", "model_powkin_comparisons_all.csv"))
 predicts = read_csv(here("output", "predicts_allcombosexceptimpose_speakerunk.csv"))
+comparisons_all_50 = read_csv(here("output", "model_powkin_comparisons_all_50.csv"))
+predicts_50 = read_csv(here("output", "predicts_allcombosexceptimpose_speakerunk_50.csv"))
 predicts_orig = read_csv(here("output", "predicts_orig.csv"))
+```
+
+```{r}
+combine_conflevels = function(df_80, df_50){
+    df_80 %>%
+        cbind(df_50 %>%
+             rename(conf.low_50 = conf.low, conf.high_50 = conf.high) %>%
+             select(conf.low_50, conf.high_50))
+ }
+comparisons_all = combine_conflevels(comparisons_all, comparisons_all_50)
+predicts = combine_conflevels(predicts, predicts_50)
 ```
 
 ```{r}
@@ -138,16 +152,18 @@ predicts_viz %>%
     ggplot(aes(x = group, y = estimate)) +
     facet_grid(Power ~ RelDist,
                labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
-    geom_point() +
+    geom_point(size = 2.2) +
     geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2) +
+    geom_errorbar(aes(ymin = conf.low_50, ymax = conf.high_50), width = 0, linewidth = 1) +
     theme_bw() + 
-    geom_line(aes(group = Power)) +
+    #geom_line(aes(group = Power)) +
     ylab("Probability") +
     theme(text = element_text(size = 26)) +
     scale_x_discrete(labels = levels2text_pron)
 ```
 
 I want to compare StanceS values in different dyads:
+
 ```{r}
 predicts_viz %>%
     filter(StanceH %in% c("Pos", "Neg"), is.na(StanceS)) %>%
@@ -170,10 +186,11 @@ comparisons_viz %>%
     geom_hline(yintercept = 0) +
     facet_grid(Power ~ RelDist,
                labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
-    geom_point() +
-    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2) +
+    geom_point(size = 2.2, position = position_dodge(.9)) +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2, alpha = .8, position = position_dodge(.9)) +
+    geom_errorbar(aes(ymin = conf.low_50, ymax = conf.high_50), width = 0, linewidth = 1.5, alpha = .8, position = position_dodge(.9)) +
     theme_bw() + 
-    geom_line() +
+    #geom_line() +
     ylab("Probability difference\n(compared to neutral stance)") +
     theme(text = element_text(size = 26)) +
     scale_x_discrete(labels = levels2text_pron) +
@@ -187,8 +204,9 @@ comparisons_viz %>%
     geom_hline(yintercept = 0) +
     facet_grid(Power ~ RelDist,
                labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
-    geom_point() +
+    geom_point(size = 2.2) +
     geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2) +
+    geom_errorbar(aes(ymin = conf.low_50, ymax = conf.high_50), width = 0, linewidth = 2) +
     theme_bw() + 
     geom_line() +
     ylab("Probability difference\n(compared to neutral stance)") +

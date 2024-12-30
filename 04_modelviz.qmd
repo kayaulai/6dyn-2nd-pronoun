@@ -145,6 +145,7 @@ predicts_viz %>%
     ylab("Probability") +
     theme(text = element_text(size = 26)) +
     scale_x_discrete(labels = levels2text_pron)
+ggsave(here("output", "predict_by_dyad.svg"), width = 868L, height = 546L, units = "px")
 ```
 
 I want to compare StanceS values in different dyads:
@@ -161,6 +162,8 @@ predicts_viz %>%
     ylab("Probability") +
     theme(text = element_text(size = 26)) +
     scale_x_discrete(labels = levels2text_pron)
+ggsave(here("output", "predict_stanceh_by_dyad.svg"), width = 868L, height = 546L, units = "px")
+
 ```
 
 ```{r}
@@ -177,7 +180,9 @@ comparisons_viz %>%
     ylab("Probability difference\n(compared to neutral stance)") +
     theme(text = element_text(size = 26)) +
     scale_x_discrete(labels = levels2text_pron) +
-    theme()
+    scale_color_discrete(name = "Stance", labels = c("Neg", "Pos"))
+ggsave(here("output", "compare_stanceh_by_dyad.svg"), width = 868L, height = 546L, units = "px")
+
 ```
 
 ```{r}
@@ -195,4 +200,6 @@ comparisons_viz %>%
     theme(text = element_text(size = 26)) +
     scale_x_discrete(labels = levels2text_pron) +
     theme()
+ggsave(here("output", "compare_stances_by_dyad.svg"), width = 868L, height = 546L, units = "px")
+
 ```

@@ -11,11 +11,12 @@ library(dplyr)
 library(rlang)
 library(glue)
 library(brms)
-library(projpred)
 library(purrr)
 library(parallel)
 library(stringr)
+library(loo)
 library(ggplot2)
+source("utilities.R")
 ```
 
 Import data:
@@ -25,16 +26,8 @@ pron_order = c("Jun", "Qing", "Gong", "RuEr")
 data = data %>% mutate(PronTypeSimple = factor(PronTypeSimple, levels = pron_order))
 ```
 
+
 ```{r}
-load_models = function(regex = "model_.*\\.rds"){
-    model_files = list.files(here("models"))
-    model_files = model_files[str_detect(model_files, "^model_.*\\.rds")]
-    models = list()
-    for(filename in model_files){
-        model_name = str_replace(filename, "\\.rds", "")
-        env_poke(global_env(), model_name, readRDS(here("models", filename)))
-    }
-}
 load_models()
 ```
 
@@ -214,5 +207,39 @@ plot_elpd_diff(kfold_compare)
 # Bayesian model weighting
 ```{r}
 load_models(regex = "model_main_(?:full_intim|main_kintanceh|main_powkin)")
-model_best_averaged = brms::pp_average(model_full_intim, model_main_kintanceh, model_main_powkin, weights = "kfold")
+best_models = list(model_full_intim, model_main_kintanceh, model_main_powkin)
+rm(list = ls()[str_detect(ls(), "^model_[a-z_]*$")])
 ```
+
+```{r}
+best_models = best_models %>% map(
+    (~ .x %>% add_criterion(
+        criterion = "kfold",
+        k = 10L,
+        cores = 4L)))
+```
+
+```{r}
+model_best_averaged = brms::pp_average(model_full_intim, model_main_kintanceh, model_main_powkin, weights = "kfold")
+saveRDS(model_best_averaged, here("models", "model_best3_average.rds"))
+```
+
+```{r}
+model_loo_weights = loo_model_weights(
+  best_models[[1]],
+  best_models[[2]],
+  best_models[[3]],
+  method = "pseudobma",
+  model_names = c("model_full_intim", "model_main_kinstanceh", "model_main_powkin"),
+  cores = 8L
+)
+saveRDS(model_loo_weights, here("models", "model_best3_loo_weights.rds"))
+```
+
+```{r}
+model_pseudobma_weights = map(best_models,
+    function(x) pseudobma_weights(x$criteria$kfold$pointwise)
+)
+saveRDS(model_pseudobma_weights, here("models", "model_best3_pseudobma_weights.rds"))
+```
+

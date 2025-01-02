@@ -24,6 +24,6 @@ The folders of this repository contain the following information:
 
     -   The file starting with 02 is for data visualisation pre-modelling;
 
-    -   The file starting with 03 fits the `brms` models and calculates fit criteria;
+    -   The file starting with 03 fits the `brms` models and calculates information criteria;
 
     -   The file starting with 04 visualises the selected model in different ways.

@@ -14,7 +14,7 @@ library(ggmosaic)
 
 
 ```{r}
-data = readRDS(here("data", "data_processed.csv"))
+data = readRDS(here("data", "data_processed.rds"))
 ```
 
 

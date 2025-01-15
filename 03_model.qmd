@@ -21,7 +21,7 @@ source("utilities.R")
 
 Import data:
 ```{r}
-data = readRDS(here("data", "data_processed.csv"))
+data = readRDS(here("data", "data_processed.rds"))
 pron_order = c("Jun", "Qing", "Gong", "RuEr")
 data = data %>% mutate(PronTypeSimple = factor(PronTypeSimple, levels = pron_order))
 ```

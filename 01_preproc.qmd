@@ -59,7 +59,8 @@ data = data %>%
 
 
 ```{r}
-saveRDS(data, here("data", "data_processed.csv"))
+saveRDS(data, here("data", "data_processed.rds"))
+write_excel_csv(data[,-27], here("data", "data_processed.csv"))
 ```
 
 # Tabulations

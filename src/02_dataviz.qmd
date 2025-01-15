@@ -63,3 +63,27 @@ ggplot(data %>%
   labs(y="Who has power over the other in the dyad?", x="Is the relationship intimate?", title = "When do people get called 'qing'?") + facet_wrap("PronTypeSimple") + theme(axis.text.y.left = element_blank()) +
   geom_mosaic_text(aes(x = product(Power, Intimate), label = after_stat(.wt)), as.label=TRUE)
 ```
+
+# A couple quick queries to save
+
+Relations:
+```{r}
+ data %>%
+  group_by(PronTypeSimple, Relation, Power) %>%
+  count() %>%
+  group_by(PronTypeSimple) %>%
+  mutate(nn = n()) %>%
+  mutate(perc = n / nn)
+ ```
+
+ Acts:
+
+```{r}
+data %>%
+  group_by(PronTypeSimple, StanceH, Act) %>%
+  count() %>%
+  group_by(PronTypeSimple, StanceH) %>%
+  mutate(nn = sum(n)) %>%
+  mutate(perc = n / nn)
+
+```

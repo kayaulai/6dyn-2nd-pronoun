@@ -10,7 +10,6 @@ library(here)
 library(tidyr)
 library(dplyr)
 library(rlang)
-library(iml)
 library(glue)
 library(brms)
 library(purrr)
@@ -25,12 +24,13 @@ source("utilities.R")
 Import data:
 
 ```{r}
-data = readRDS(here("data", "data_processed.rds"))
+data = readRDS(here("data", "data_processed.csv"))
 pron_order = c("Jun", "Qing", "Gong", "RuEr")
 data = data %>% mutate(PronTypeSimple = factor(PronTypeSimple, levels = pron_order))
 ```
 
 ```{r}
+#model_pseudobma_weights = readRDS(here("models", "model_best3_pseudobma_weights.rds"))
 load_models(regex = "^model_main_powkin\\.rds$")
 ```
 
@@ -79,9 +79,8 @@ write_csv(predicts_allcombosexceptimpose_speakerunk_50, here("output", "predicts
 
 ```{r}
 predicts_orig = predictions(model_main_powkin, conf.level = .8)
-write_excel_csv(predicts_orig, here("output", "predicts_orig.csv"))
+write_csv(predicts_orig, here("output", "predicts_orig.csv"))
 ```
-
 
 ```{r}
 comparisons_all = comparisons(model_main_powkin,
@@ -101,7 +100,7 @@ comparisons_all_50 = comparisons(model_main_powkin,
 write_csv(comparisons_all_50, here("output", "model_powkin_comparisons_all_50.csv"))
 ```
 
-# Global visualisation
+# Visualisation
 
 ```{r}
 comparisons_all = read_csv(here("output", "model_powkin_comparisons_all.csv"))
@@ -132,7 +131,7 @@ prep_me_df_for_viz = function(df){
         mutate(group = factor(group, levels = c("Qing", "RuEr", "Jun", "Gong"))) %>%
         mutate(RelDist = factor(RelDist, levels = c("Kin", "IntimateNonKin", "NonIntimate")),
                Power = factor(Power, levels = c("Listener", "Equal", "Speaker"))) %>%
-        filter(!is.na(RelDist)) %>%
+        filter(!is.na(RelDist), is.na(ImpositionH)) %>%
         filter((!(Kin == "Yes" & Intimate == "N") & !(Kin == "Yes" & Intimate == "/")) | is.na(Kin))
 }
 comparisons_viz = prep_me_df_for_viz(comparisons_all)
@@ -149,12 +148,12 @@ Predictions for each dyad type with neutral stance:
 
 ```{r}
 predicts_viz %>%
-    filter(is.na(StanceH), is.na(StanceS), is.na(ImpositionH)) %>%
+    filter(is.na(StanceH), is.na(StanceS)) %>%
     ggplot(aes(x = group, y = estimate)) +
     facet_grid(Power ~ RelDist,
                labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
     geom_point(size = 2.2) +
-    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2) +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2, linewidth = .3) +
     geom_errorbar(aes(ymin = conf.low_50, ymax = conf.high_50), width = 0, linewidth = 1) +
     theme_bw() + 
     #geom_line(aes(group = Power)) +
@@ -168,7 +167,7 @@ I want to compare StanceS values in different dyads:
 
 ```{r}
 predicts_viz %>%
-    filter(StanceH %in% c("Pos", "Neg"), is.na(StanceS), is.na(ImpositionH)) %>%
+    filter(StanceH %in% c("Pos", "Neg"), is.na(StanceS)) %>%
     ggplot(aes(x = group, y = estimate, group = StanceH, col = StanceH)) +
     facet_grid(Power ~ RelDist,
                labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
@@ -185,7 +184,7 @@ ggsave(here("output", "predict_stanceh_by_dyad.svg"), width = 868L, height = 546
 
 ```{r}
 comparisons_viz %>%
-    filter(term == "StanceH", contrast %in% c("Neg -", "Pos -"), is.na(StanceS), is.na(ImpositionH)) %>%
+    filter(term == "StanceH", contrast %in% c("Neg -", "Pos -"), is.na(StanceS)) %>%
     ggplot(aes(x = group, y = estimate, group = contrast, col = contrast)) +
     geom_hline(yintercept = 0) +
     facet_grid(Power ~ RelDist,
@@ -195,7 +194,7 @@ comparisons_viz %>%
     geom_errorbar(aes(ymin = conf.low_50, ymax = conf.high_50), width = 0, linewidth = 1.5, alpha = .8, position = position_dodge(.9)) +
     theme_bw() + 
     #geom_line() +
-    ylab("Probability difference\n(compared to neutral stance)") +
+    ylab("Probability difference\n(vs. neutral stance)") +
     theme(text = element_text(size = 26)) +
     scale_x_discrete(labels = levels2text_pron) +
     scale_color_discrete(name = "Stance", labels = c("Neg", "Pos"))
@@ -205,8 +204,48 @@ ggsave(here("output", "compare_stanceh_by_dyad.svg"), width = 868L, height = 546
 
 ```{r}
 comparisons_viz %>%
-    filter(term == "StanceS", contrast %in% c("Pos -"), is.na(StanceH), is.na(ImpositionH)) %>%
-    ggplot(aes(x = group, y = estimate, col = contrast)) +
+    filter(term == "StanceH", contrast %in% c("Neg -"), is.na(StanceS)) %>%
+    ggplot(aes(x = group, y = estimate, group = contrast)) +
+    geom_hline(yintercept = 0) +
+    facet_grid(Power ~ RelDist,
+               labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
+    geom_point(size = 2.2) +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2, alpha = .8, linewidth = .3) +
+    geom_errorbar(aes(ymin = conf.low_50, ymax = conf.high_50), width = 0, linewidth = 1.5, alpha = .8) +
+    theme_bw() + 
+    geom_line() +
+    ylab("Probability difference\n(negative vs. neutral stance)") +
+    theme(text = element_text(size = 26)) +
+    scale_x_discrete(labels = levels2text_pron)
+ggsave(here("output", "compare_stanceh_negvsnone_by_dyad.svg"), width = 868L, height = 546L, units = "px")
+```
+
+```{r}
+comparisons_viz %>%
+    filter(term == "StanceH", contrast %in% c("Pos -"), is.na(StanceS)) %>%
+    ggplot(aes(x = group, y = estimate, group = contrast)) +
+    geom_hline(yintercept = 0) +
+    facet_grid(Power ~ RelDist,
+               labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
+    geom_point(size = 2.2) +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2, alpha = .8, linewidth = .3) +
+    geom_errorbar(aes(ymin = conf.low_50, ymax = conf.high_50), width = 0, linewidth = 1.5, alpha = .8) +
+    theme_bw() + 
+    geom_line() +
+    ylab("Probability difference\n(positive vs. neutral stance)") +
+    theme(text = element_text(size = 26)) +
+    scale_x_discrete(labels = levels2text_pron)
+ggsave(here("output", "compare_stanceh_posvsnone_by_dyad.svg"), width = 868L, height = 546L, units = "px")
+
+```
+
+```{}
+```
+
+```{r}
+comparisons_viz %>%
+    filter(term == "StanceS", contrast %in% c("Pos -"), is.na(StanceH)) %>%
+    ggplot(aes(x = group, y = estimate)) +
     geom_hline(yintercept = 0) +
     facet_grid(Power ~ RelDist,
                labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
@@ -215,76 +254,10 @@ comparisons_viz %>%
     geom_errorbar(aes(ymin = conf.low_50, ymax = conf.high_50), width = 0, linewidth = 2) +
     theme_bw() + 
     geom_line() +
-    ylab("Probability difference\n(compared to neutral stance)") +
+    ylab("Probability difference\n(positive vs. neutral stance)") +
     theme(text = element_text(size = 26)) +
     scale_x_discrete(labels = levels2text_pron) +
     theme()
 ggsave(here("output", "compare_stances_by_dyad.svg"), width = 868L, height = 546L, units = "px")
-
-```
-
-```{r}
-comparisons_viz %>%
-    filter(term == "StanceS", contrast %in% c("T -"), is.na(StanceH), is.na(StanceS)) %>%
-    ggplot(aes(x = group, y = estimate, col = contrast)) +
-    geom_hline(yintercept = 0) +
-    facet_grid(Power ~ RelDist,
-               labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
-    geom_point(size = 2.2) +
-    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2) +
-    geom_errorbar(aes(ymin = conf.low_50, ymax = conf.high_50), width = 0, linewidth = 2) +
-    theme_bw() + 
-    geom_line() +
-    ylab("Probability difference\n(compared to neutral stance)") +
-    theme(text = element_text(size = 26)) +
-    scale_x_discrete(labels = levels2text_pron) +
-    theme()
-ggsave(here("output", "compare_imposeT_by_dyad.svg"), width = 868L, height = 546L, units = "px")
-
-```
-
-```{r}
-comparisons_viz %>%
-    filter(term == "StanceS", contrast %in% c("HBen -"), is.na(StanceH), is.na(StanceS)) %>%
-    ggplot(aes(x = group, y = estimate, col = contrast)) +
-    geom_hline(yintercept = 0) +
-    facet_grid(Power ~ RelDist,
-               labeller = as_labeller(c(levels2text_RelDist, levels2text_pow))) +
-    geom_point(size = 2.2) +
-    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .2) +
-    geom_errorbar(aes(ymin = conf.low_50, ymax = conf.high_50), width = 0, linewidth = 2) +
-    theme_bw() + 
-    geom_line() +
-    ylab("Probability difference\n(compared to neutral stance)") +
-    theme(text = element_text(size = 26)) +
-    scale_x_discrete(labels = levels2text_pron) +
-    theme()
-ggsave(here("output", "compare_imposeHBen_by_dyad.svg"), width = 868L, height = 546L, units = "px")
-
-```
-
-# Local interpretation
-
-Generate predictor object for `iml`:
-```{r}
-X = data %>%
-    select(Power, Intimate, StanceH, StanceS, Kin, ImpositionH, Speaker)
-predictor = Predictor$new(model_main_powkin, data = X, y = data$PronTypeSimple)
-
-```
-
-Generate Shapley values:
-```{r}
-shaplist = list()
-examples_to_use = c(71, 104, 12, 84, 340, 331, 113, 124, 93, 234, 344, 122, 97, 224, 131, 112, 124, 133, 237, 344, 122, 97, 224, 88, 61, 43, 127, 335, 73, 261, 72, 142, 90, 215, 163)
-for(x in examples_to_use){
-    print(glue("Now calculating Shapley value for data no.: {x}"))
-    shaplist[[x]] = Shapley$new(predictor, x.interest = X[x, ], sample.size = 50)
-}
-shapley_values = saveRDS(shaplist, here("output", "shaplist.rds"))
-```
-
-```{r}
-
 
 ```

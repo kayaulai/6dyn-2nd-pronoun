@@ -132,7 +132,7 @@ prep_me_df_for_viz = function(df){
         mutate(group = factor(group, levels = c("Qing", "RuEr", "Jun", "Gong"))) %>%
         mutate(RelDist = factor(RelDist, levels = c("Kin", "IntimateNonKin", "NonIntimate")),
                Power = factor(Power, levels = c("Listener", "Equal", "Speaker"))) %>%
-        filter(!is.na(RelDist))) %>%
+        filter(!is.na(RelDist)) %>%
         filter((!(Kin == "Yes" & Intimate == "N") & !(Kin == "Yes" & Intimate == "/")) | is.na(Kin))
 }
 comparisons_viz = prep_me_df_for_viz(comparisons_all)
@@ -262,7 +262,7 @@ ggsave(here("output", "compare_stances_by_dyad.svg"), width = 868L, height = 546
 
 ```{r}
 comparisons_viz %>%
-    filter(term == "StanceS", contrast %in% c("T -"), is.na(StanceH), is.na(StanceS)) %>%
+    filter(term == "ImpositionT", contrast %in% c("T -"), is.na(StanceH), is.na(StanceS)) %>%
     ggplot(aes(x = group, y = estimate, col = contrast)) +
     geom_hline(yintercept = 0) +
     facet_grid(Power ~ RelDist,
@@ -324,4 +324,44 @@ shapley_values = saveRDS(shaplist, here("output", "shaplist.rds"))
 
 ```{r}
 shaplist = readRDS(here("output", "shaplist.rds"))
+```
+
+```{r}
+varnameOrder = c("Power", "Intimate", "Kin", "StanceH", "StanceS", "ImpositionH", "Speaker")
+getWaterfall = function(shap, varnameMap = NULL, varnameOrder = NULL, varnameReplace = NULL){
+  graph = shap$results %>%
+      filter(class == "P(Y = Qing)") %>%
+      mutate(feature = factor(feature, levels = c("Power", "Intimate", "Kin", "StanceH", "StanceS", "ImpositionH", "Speaker"))) %>%
+      arrange(feature) %>%
+      select(-class, -feature, -phi.var) %>%
+      mutate(phi = round(phi, 3)) %>%
+      waterfall(linetype = "dotted", rect_border = "grey", rect_text_size = 2) +
+      theme_minimal() + theme(text=element_text(size=21)) + scale_y_continuous(labels = \(x) round(x + 0.472382, 2), "Accumulated prediction") +
+      xlab("predictor")
+
+    #   scale_y_continuous(limits = c(cs_min, cs_max)) +
+    #   
+    if(!is.null(varnameReplace))
+        graph = graph  +
+            scale_x_discrete(labels = varnameReplace)
+
+    graph
+}
+```
+
+```{r}
+varnameReplace_84 = c("Power=\nEqual", "Intimate=\nY",  "Kin=\nNo","StanceH=\nNeg", "StanceS=\nN/A", "ImpositionH=\nN/A", "Speaker=\nKǒng Chúnzhī")
+getWaterfall(shap, varnameOrder = varnameOrder, varnameReplace = varnameReplace_84)
+```
+
+```{r}
+varnameReplace_61 = c("Power=\nListener", "Intimate=\nN", "Kin=\nN", "StanceH=\nNeg", "StanceS=\nN/A", "ImpositionH=\nN/A", "Speaker=\nLù Jī")
+getWaterfall(shaplist[[61]], varnameOrder = varnameOrder, varnameReplace = varnameReplace_61)
+```
+
+
+```{r}
+varnameReplace_104 = c("Power=\nListener", "Intimate=\nN", "Kin=\nN", "StanceH=\nNeg", "StanceS=\nN/A", "ImpositionH=\nN/A", "Speaker=\nLù Jī")
+getWaterfall(shaplist[[104]], varnameOrder = varnameOrder)
+##NOTE: Fix this in annos!!!!!
 ```

@@ -19,7 +19,7 @@ library(marginaleffects)
 library(ggplot2)
 library(readr)
 library(tibble)
-source("utilities.R")
+source(here("src", "utilities.R"))
 ```
 
 Import data:
@@ -320,4 +320,8 @@ for(x in examples_to_use){
     shaplist[[x]] = Shapley$new(predictor, x.interest = X[x, ], sample.size = 50)
 }
 shapley_values = saveRDS(shaplist, here("output", "shaplist.rds"))
+```
+
+```{r}
+shaplist = readRDS(here("output", "shaplist.rds"))
 ```
